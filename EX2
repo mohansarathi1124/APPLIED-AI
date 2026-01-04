@@ -1,0 +1,31 @@
+inputs = [(0,0), (0,1), (1,0), (1,1)]
+lr = 0.1
+epochs = 10
+
+def train_gate(targets, gate_name):
+    print(gate_name)
+    w1, w2, b = -0.5, 0.7, 0.88
+
+    for _ in range(epochs):
+        error = 0
+        for i in range(4):
+            x1, x2 = inputs[i]
+            net = x1*w1 + x2*w2 + b
+            y = 1 if net >= 0 else 0
+            e = targets[i] - y
+
+            w1 += lr * e * x1
+            w2 += lr * e * x2
+            b  += lr * e
+            error += abs(e)
+
+        if error == 0:
+            break
+
+    print("Final:", w1, w2, b, "\n")
+
+# OR Gate
+train_gate([0, 1, 1, 1], "OR Gate")
+
+# AND Gate
+train_gate([0, 0, 0, 1], "AND Gate")
