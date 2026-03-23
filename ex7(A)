@@ -1,0 +1,116 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import cm
+import tensorflow as tf
+from sklearn.preprocessing import StandardScaler
+
+def loss_func(w):
+    x, y = w
+    return (x**2 + y - 11)**2 + (x + y**2 - 7)**2
+
+def grad_loss(w):
+    x, y = w
+    dx = 4*x*(x**2 + y - 11) + 2*(x + y**2 - 7)
+    dy = 2*(x**2 + y - 11) + 4*y*(x + y**2 - 7)
+    return np.array([dx, dy])
+
+def sgd_opt(start, lr=0.005, steps=150):
+    w = start.copy()
+    track, losses = [w.copy()], []
+    for _ in range(steps):
+        w = w - lr * grad_loss(w)
+        track.append(w.copy())
+        losses.append(loss_func(w))
+    return np.array(track), losses
+
+def nesterov_opt(start, lr=0.008, momentum=0.95, steps=150):
+    w = start.copy()
+    v = np.zeros_like(w)
+    track, losses = [w.copy()], []
+    for _ in range(steps):
+        look_ahead = w - momentum * v
+        g = grad_loss(look_ahead)
+        v = momentum * v + lr * g
+        w = w - v
+        track.append(w.copy())
+        losses.append(loss_func(w))
+    return np.array(track), losses
+
+def adam_opt(start, lr=0.1, steps=150):
+    w = start.copy()
+    m, v = np.zeros(2), np.zeros(2)
+    b1, b2, eps = 0.9, 0.99, 1e-7
+    track, losses = [w.copy()], []
+    for t in range(1, steps + 1):
+        g = grad_loss(w)
+        m = b1 * m + (1 - b1) * g
+        v = b2 * v + (1 - b2) * (g**2)
+        m_hat = m / (1 - b1**t)
+        v_hat = v / (1 - b2**t)
+        w = w - lr * m_hat / (np.sqrt(v_hat) + eps)
+        track.append(w.copy())
+        losses.append(loss_func(w))
+    return np.array(track), losses
+
+origin = np.array([5.0, 5.0]) 
+methods = {"SGD": sgd_opt, "Nesterov": nesterov_opt, "Adam": adam_opt}
+results = {k: fn(origin) for k, fn in methods.items()}
+
+grid_range = np.linspace(-6, 6, 250)
+X, Y = np.meshgrid(grid_range, grid_range)
+Z = loss_func([X, Y])
+
+plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)
+plt.contour(X, Y, Z, levels=np.logspace(0, 3, 20), cmap='jet')
+for name, (path, _) in results.items():
+    plt.plot(path[:, 0], path[:, 1], label=name, lw=2)
+plt.legend()
+
+plt.subplot(1, 2, 2)
+for name, (_, loss) in results.items():
+    plt.plot(loss, label=name)
+plt.yscale('log')
+plt.legend()
+plt.show()
+
+(x_train, y_train), _ = tf.keras.datasets.mnist.load_data()
+mask = (y_train == 3) | (y_train == 8)
+x_data = x_train[mask].reshape(-1, 784)
+y_data = (y_train[mask] == 8).astype(np.float32)
+
+feat1 = x_data[:, :392].mean(axis=1)
+feat2 = x_data[:, 392:].mean(axis=1)
+X_norm = StandardScaler().fit_transform(np.column_stack((feat1, feat2)))
+
+def sigmoid(z):
+    return 1 / (1 + np.exp(-np.clip(z, -20, 20)))
+
+def log_loss(w):
+    p = sigmoid(X_norm.dot(w))
+    return -np.mean(y_data*np.log(p+1e-9) + (1-y_data)*np.log(1-p+1e-9))
+
+def log_grad(w):
+    p = sigmoid(X_norm.dot(w))
+    return X_norm.T.dot(p - y_data) / len(y_data)
+
+def train_model(epochs=150, lr=0.1):
+    w = np.random.randn(2) * 0.01
+    m, v = np.zeros(2), np.zeros(2)
+    b1, b2, eps = 0.9, 0.999, 1e-8
+    history = []
+    for t in range(1, epochs + 1):
+        g = log_grad(w)
+        m = b1 * m + (1 - b1) * g
+        v = b2 * v + (1 - b2) * (g**2)
+        m_hat = m / (1 - b1**t)
+        v_hat = v / (1 - b2**t)
+        w = w - lr * m_hat / (np.sqrt(v_hat) + eps)
+        history.append(log_loss(w))
+    return w, history
+
+final_w, loss_hist = train_model()
+plt.figure()
+plt.plot(loss_hist, color='blue')
+plt.title("MNIST 3 vs 8 Binary Loss")
+plt.show()
