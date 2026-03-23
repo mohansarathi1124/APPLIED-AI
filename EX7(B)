@@ -1,0 +1,108 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import animation, cm
+from IPython.display import HTML
+
+def loss_fn(w):
+    a, b = w
+    return (a**2 + b - 11)**2 + (a + b**2 - 7)**2
+
+def grad_fn(w):
+    a, b = w
+    da = 4*a*(a**2 + b - 11) + 2*(a + b**2 - 7)
+    db = 2*(a**2 + b - 11) + 4*b*(a + b**2 - 7)
+    return np.array([da, db])
+
+def gd_step(w, lr):
+    return w - lr * grad_fn(w)
+
+def nesterov_step(w, v, lr, gamma=0.9):
+    lookahead = w - gamma * v
+    g = grad_fn(lookahead)
+    v = gamma * v + lr * g
+    return w - v, v
+
+def adagrad_step(w, G, lr):
+    g = grad_fn(w)
+    G += g**2
+    return w - lr * g / (np.sqrt(G) + 1e-8), G
+
+def rmsprop_step(w, Eg, lr, beta=0.9):
+    g = grad_fn(w)
+    Eg = beta * Eg + (1 - beta) * (g**2)
+    return w - lr * g / (np.sqrt(Eg) + 1e-8), Eg
+
+def adam_step(w, m, v, t, lr):
+    g = grad_fn(w)
+    m = 0.9 * m + 0.1 * g
+    v = 0.999 * v + 0.001 * (g**2)
+    m_hat = m / (1 - 0.9**t)
+    v_hat = v / (1 - 0.999**t)
+    w = w - lr * m_hat / (np.sqrt(v_hat) + 1e-8)
+    return w, m, v
+
+start = np.array([-4.0, 4.0])
+iterations = 80
+lr = 0.01
+paths = {}
+
+w_gd = start.copy()
+traj_gd = [w_gd.copy()]
+for i in range(iterations):
+    w_gd = gd_step(w_gd, lr)
+    traj_gd.append(w_gd.copy())
+paths["GD"] = np.array(traj_gd)
+
+w_nes = start.copy()
+v_nes = np.zeros(2)
+traj_nes = [w_nes.copy()]
+for i in range(iterations):
+    w_nes, v_nes = nesterov_step(w_nes, v_nes, lr)
+    traj_nes.append(w_nes.copy())
+paths["Nesterov"] = np.array(traj_nes)
+
+w_ada = start.copy()
+G_ada = np.zeros(2)
+traj_ada = [w_ada.copy()]
+for i in range(iterations):
+    w_ada, G_ada = adagrad_step(w_ada, G_ada, 0.4)
+    traj_ada.append(w_ada.copy())
+paths["Adagrad"] = np.array(traj_ada)
+
+w_rms = start.copy()
+Eg_rms = np.zeros(2)
+traj_rms = [w_rms.copy()]
+for i in range(iterations):
+    w_rms, Eg_rms = rmsprop_step(w_rms, Eg_rms, lr)
+    traj_rms.append(w_rms.copy())
+paths["RMSProp"] = np.array(traj_rms)
+
+w_adm = start.copy()
+m_adm, v_adm = np.zeros(2), np.zeros(2)
+traj_adm = [w_adm.copy()]
+for t in range(1, iterations + 1):
+    w_adm, m_adm, v_adm = adam_step(w_adm, m_adm, v_adm, t, 0.05)
+    traj_adm.append(w_adm.copy())
+paths["Adam"] = np.array(traj_adm)
+
+x = np.linspace(-6, 6, 200)
+y = np.linspace(-6, 6, 200)
+X, Y = np.meshgrid(x, y)
+Z = loss_fn([X, Y])
+
+fig2d, ax2d = plt.subplots(figsize=(8, 6))
+ax2d.contour(X, Y, Z, 40)
+lines = {n: ax2d.plot([], [], lw=2, label=n)[0] for n in paths}
+points = {n: ax2d.plot([], [], 'o')[0] for n in paths}
+ax2d.legend()
+
+def animate2d(i):
+    for name in paths:
+        p = paths[name]
+        if i < len(p):
+            lines[name].set_data(p[:i, 0], p[:i, 1])
+            points[name].set_data([p[i-1, 0]], [p[i-1, 1]])
+    return list(lines.values()) + list(points.values())
+
+ani2d = animation.FuncAnimation(fig2d, animate2d, frames=iterations, interval=120, blit=True)
+plt.show()
